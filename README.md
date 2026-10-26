@@ -86,7 +86,7 @@ Open the page and flash it from your browser:
 
 | | M5Burner |
 |---|---|
-| MIASMORA | [TO BE ADDED: the WebBurner page URL] |
+| MIASMORA | https://burner.m5stack.com/share/firmware/3NRPTY |
 
 1. Connect the Cardputer ADV to your computer with USB-C
 2. Open the link above in a browser that supports Web Serial (Chrome or Edge on a PC)

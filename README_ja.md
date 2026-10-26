@@ -86,7 +86,7 @@ MIASMORA は、ホラーゲームやホラー映画で流れるような、不�
 
 | | M5Burner |
 |---|---|
-| MIASMORA | 【要確認：WebBurner の公開ページの URL】 |
+| MIASMORA | https://burner.m5stack.com/share/firmware/3NRPTY |
 
 1. Cardputer ADV を USB-C でパソコンに接続します
 2. 上のリンクを、Web Serial に対応したブラウザ（パソコンの Chrome か Edge）で開きます

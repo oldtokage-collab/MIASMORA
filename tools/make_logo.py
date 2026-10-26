@@ -159,11 +159,145 @@ def make_promo():
     print("wrote", path)
 
 
+# --- the M5Burner thumbnail (1280 x 720) ------------------------------------------
+# Watcher's engraved eye on the left (the firmware's drawing, ui_watcher.cpp,
+# redrawn large), the logo and the subtitle on the right.
+THUMB_W, THUMB_H = 1280, 720
+INK_BONE = (205, 200, 192)
+INK_GREY = (120, 116, 112)
+INK_RED = (225, 70, 55)
+INK_DRED = (165, 28, 28)
+
+
+def eye_layer(w, h, cx, cy, hw):
+    """The engraved eye as RGBA (drawn 2x larger, then reduced)."""
+    import math
+    SS = 2
+    k = hw / 70.0                       # the device's eye is 70 px wide (half)
+    UH, LH, IR, PR = 20 * k, 13 * k, 14 * k, 4.2 * k
+    big = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    S = lambda v: v * SS
+
+    def up(u): return 0.0 if abs(u) >= 1 else (1 - u * u) ** 0.78 * (1 - 0.05 * u)
+    def lo(u): return 0.0 if abs(u) >= 1 else (1 - u * u) ** 1.15
+    def curve(f, u0, u1, n=200):
+        return [(S(cx + (u0 + (u1 - u0) * i / n) * hw), S(f(u0 + (u1 - u0) * i / n))) for i in range(n + 1)]
+    top = lambda u: cy - UH * up(u)
+    bot = lambda u: cy + LH * lo(u)
+    lw = lambda px: max(1, int(round(S(px * k / 2.4))))
+
+    # inside the lids: hatching and the iris, clipped by a mask
+    inner = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    di = ImageDraw.Draw(inner)
+    step = 3.0 * k
+    x = cx - hw - UH
+    while x < cx + hw + UH:                            # the shadow under the upper lid
+        di.line([(S(x), S(cy - UH)), (S(x + UH * 0.45), S(cy - UH * 0.55))], fill=INK_GREY + (230,), width=lw(1.0))
+        x += step
+    for side in (-1, 1):                               # the corners: cross-hatched
+        for j in range(9):
+            xx = cx + side * (hw * 0.62 + j * 2.4 * k)
+            di.line([(S(xx), S(cy - UH * 0.7)), (S(xx - side * 7 * k), S(cy + UH * 0.7))], fill=INK_GREY + (200,), width=lw(0.9))
+    icx, icy = cx, cy + 1 * k
+    for j in range(240):                               # the iris: radial streaks of shade
+        a = 2 * math.pi * j / 240
+        fib = 0.5 + 0.5 * math.cos(a * 22 + 2.5 * ((j * 7919) % 97) / 97.0)
+        if fib < 0.35:
+            continue
+        al = int(255 * (0.25 + 0.75 * fib))
+        di.line([(S(icx + math.cos(a) * IR * 0.42), S(icy + math.sin(a) * IR * 0.42)),
+                 (S(icx + math.cos(a) * IR * 0.95), S(icy + math.sin(a) * IR * 0.95))], fill=INK_RED + (al,), width=lw(0.8))
+    di.ellipse([S(icx - IR * 0.62), S(icy - IR * 0.62), S(icx + IR * 0.62), S(icy + IR * 0.62)], outline=INK_DRED + (210,), width=lw(0.8))
+    di.ellipse([S(icx - IR), S(icy - IR), S(icx + IR), S(icy + IR)], outline=INK_RED + (255,), width=lw(1.6))
+    di.ellipse([S(icx - PR), S(icy - PR), S(icx + PR), S(icy + PR)], fill=C_BG + (255,), outline=INK_RED + (255,), width=lw(1.0))
+    hr, hx, hy = IR * 0.12, icx - IR * 0.32, icy - IR * 0.36
+    di.ellipse([S(hx - hr), S(hy - hr), S(hx + hr), S(hy + hr)], fill=(235, 225, 210, 255))
+    mask = Image.new("L", big.size, 0)
+    ImageDraw.Draw(mask).polygon(curve(top, -1, 1) + list(reversed(curve(bot, -1, 1))), fill=255)
+    big.paste(inner, (0, 0), Image.composite(inner, Image.new("RGBA", big.size, (0, 0, 0, 0)), mask).split()[3])
+
+    # the creases above (they stay when it shuts), the lids, strokes under the lower lid
+    for off, ext, al in ((4.5, 0.86, 200), (8.0, 0.7, 150)):
+        def cf(u, off=off):
+            a = max(0.0, 1 - (u / 1.05) ** 2)
+            return cy - UH * a ** 0.75 - off * k * math.sqrt(a)
+        d.line(curve(cf, -ext, ext), fill=INK_BONE + (al,), width=lw(1.0))
+    d.line(curve(top, -1, 1), fill=INK_BONE + (255,), width=lw(2.2))
+    d.line(curve(bot, -1, 1), fill=INK_BONE + (225,), width=lw(1.1))
+    d.line(curve(lambda u: bot(u) + 3.5 * k, -0.55, 0.55), fill=INK_GREY + (220,), width=lw(1.0))
+    d.line(curve(lambda u: bot(u) + 6.0 * k, -0.35, 0.35), fill=INK_GREY + (170,), width=lw(0.9))
+    # lashes: curved, longer towards the outer (right) corner; short ticks below
+    n = 14
+    for i in range(n):
+        u = -0.82 + 1.7 * (i + 0.5) / n
+        x0, y0 = cx + u * hw, top(u)
+        ln = (4 + 5 * max(0.0, u + 0.3)) * k
+        pts = []
+        for s8 in range(9):
+            s = s8 / 8
+            ang = -1.5708 + (0.35 + 0.9 * max(0.0, u)) * s * 1.6 + u * 0.4
+            pts.append((S(x0 + math.cos(ang) * ln * s + 0.48 * ln * s * s * max(0.2, u + 0.5)), S(y0 + math.sin(ang) * ln * s)))
+        d.line(pts, fill=INK_BONE + (235,), width=lw(1.0))
+    for i in range(11):
+        u = -0.7 + 1.4 * i / 10
+        x0, y0, ang = cx + u * hw, bot(u), 1.5708 + u * 0.8
+        d.line([(S(x0), S(y0)), (S(x0 + math.cos(ang) * 2.2 * k), S(y0 + math.sin(ang) * 2.2 * k))], fill=INK_BONE + (200,), width=lw(0.9))
+
+    layer = big.resize((w, h), Image.LANCZOS)
+    # the ink takes unevenly, like a print (a fixed grain)
+    rnd = random.Random(0x1D)
+    grain = Image.new("L", (w // 2 + 1, h // 2 + 1))
+    grain.putdata([int(255 * (0.72 + 0.28 * rnd.random())) for _ in range((w // 2 + 1) * (h // 2 + 1))])
+    grain = grain.resize((w, h), Image.NEAREST)
+    r, g, b, a = layer.split()
+    a = Image.composite(a, a, a).point(lambda v: v)
+    a = ImageChops_multiply(a, grain)
+    return Image.merge("RGBA", (r, g, b, a))
+
+
+def ImageChops_multiply(a, b):
+    from PIL import ImageChops
+    return ImageChops.multiply(a, b)
+
+
+def make_thumbnail():
+    W, H = THUMB_W, THUMB_H
+    fog = fog_field(W, H, 0x7A11).load()
+    img = Image.new("RGB", (W, H))
+    px = img.load()
+    for y in range(H):
+        for x in range(W):
+            px[x, y] = blend(C_BG, C_ACC2, 0.08 * fog[x, y] / 255.0)
+    # left: the eye
+    eye = eye_layer(W, H, 330, 360, 255)
+    img.paste(eye, (0, 0), eye)
+    # right: the logo with a soft glow, then the subtitle
+    logo = render_text(500)
+    glow, gx, gy = glow_of(logo, 14, 1.4)
+    lx, ly = 690, 300 - logo.height // 2
+    base = img.copy()
+    img.paste(Image.new("RGB", glow.size, C_ACC2), (lx - gx, ly - gy), glow.point(lambda v: int(v * 0.45)))
+    img.paste(Image.new("RGB", logo.size, C_ACC2), (lx, ly), logo)
+    d = ImageDraw.Draw(img)
+    for text, size, col, y in (("DARK AMBIENT DRONE GENERATOR", 20, (150, 146, 140), ly + logo.height + 60),
+                               ("CARDPUTER ADV", 20, (95, 92, 90), ly + logo.height + 100)):
+        font = ImageFont.load_default(size=size)
+        x = lx + 4
+        for ch in text:
+            d.text((x, y), ch, font=font, fill=col)
+            x += d.textlength(ch, font=font) + 6
+    path = os.path.join(ROOT, "docs", "MIASMORA_thumbnail_1280x720.png")
+    img.save(path, optimize=True)
+    print("wrote", path)
+
+
 def main():
     logo = render_text(LOGO_WIDTH)
     glow, gx, gy = glow_of(logo, GLOW_RADIUS, GLOW_GAIN)
     write_header(logo, glow, gx, gy)
     make_promo()
+    make_thumbnail()
 
 
 if __name__ == "__main__":
